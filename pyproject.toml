@@ -27,6 +27,8 @@ dependencies = [
 dev = [
     "pytest>=8.3.0",
     "pytest-asyncio>=0.24.0",
+    "aiosqlite>=0.20.0",
+    "fakeredis>=2.26.0",
     "ruff>=0.6.0",
     "mypy>=1.11.0",
 ]
@@ -37,3 +39,8 @@ target-version = "py311"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+testpaths = ["tests"]
+filterwarnings = [
+    "ignore::DeprecationWarning:passlib.*",
+    "ignore::DeprecationWarning:jose.*",
+]
