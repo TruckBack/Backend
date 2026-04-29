@@ -73,6 +73,12 @@ class InvalidStateError(AppException):
     message = "Invalid state transition"
 
 
+class InternalServerError(AppException):
+    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    code = "internal_server_error"
+    message = "An internal server error occurred"
+
+
 def _error_response(
     status_code: int, code: str, message: str, details: Any = None
 ) -> JSONResponse:
