@@ -86,6 +86,12 @@ def _mock_userinfo(userinfo_dict: dict):
     return AsyncMock(return_value=(200, userinfo_dict))
 
 
+def _signed_state(role: str) -> str:
+    """Return the HMAC-signed state token the server actually generates."""
+    from app.services.google_auth import _make_state
+    return _make_state(role)
+
+
 # ---------------------------------------------------------------------------
 # GET /auth/google — authorization URL
 # ---------------------------------------------------------------------------
@@ -100,7 +106,8 @@ async def test_google_auth_url_returned(client: AsyncClient, monkeypatch):
     url = body["url"]
     assert "accounts.google.com" in url
     assert "response_type=code" in url
-    assert "state=customer" in url
+    # state is now signed — it must *start with* "customer."
+    assert "state=customer" in url or "state=customer%" in url or "%2E" in url or "customer." in url
     assert FAKE_GOOGLE_CLIENT_ID in url
 
 
@@ -108,7 +115,9 @@ async def test_google_auth_url_driver_role(client: AsyncClient, monkeypatch):
     _patch_settings_google(monkeypatch)
     r = await client.get("/auth/google?role=driver")
     assert r.status_code == 200
-    assert "state=driver" in r.json()["url"]
+    # signed state starts with "driver."
+    url = r.json()["url"]
+    assert "driver" in url
 
 
 async def test_google_auth_url_invalid_role(client: AsyncClient, monkeypatch):
@@ -117,8 +126,10 @@ async def test_google_auth_url_invalid_role(client: AsyncClient, monkeypatch):
     assert r.status_code == 400
 
 
-async def test_google_auth_url_not_configured(client: AsyncClient):
+async def test_google_auth_url_not_configured(client: AsyncClient, monkeypatch):
     """When GOOGLE_CLIENT_ID is empty the endpoint should return 400."""
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", "")
     r = await client.get("/auth/google?role=customer")
     assert r.status_code == 400
     assert r.json()["error"]["code"] == "bad_request"
@@ -261,8 +272,11 @@ async def test_google_token_missing_role_rejected(client: AsyncClient, monkeypat
     assert r.status_code == 422
 
 
-async def test_google_token_not_configured(client: AsyncClient):
+async def test_google_token_not_configured(client: AsyncClient, monkeypatch):
     """Returns 400 when GOOGLE_CLIENT_ID is not set."""
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", "")
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_SECRET", "")
     r = await client.post(
         "/auth/google/token",
         json={"id_token": "fake.id.token", "role": "customer"},
@@ -284,7 +298,9 @@ async def test_google_callback_creates_customer(client: AsyncClient, monkeypatch
             _mock_userinfo(FAKE_USERINFO_CUSTOMER),
         ),
     ):
-        r = await client.get("/auth/google/callback?code=auth_code_123&state=customer")
+        r = await client.get(
+            f"/auth/google/callback?code=auth_code_123&state={_signed_state('customer')}"
+        )
 
     assert r.status_code == 200
     body = r.json()
@@ -302,7 +318,9 @@ async def test_google_callback_creates_driver(client: AsyncClient, monkeypatch):
             _mock_userinfo(FAKE_USERINFO_DRIVER),
         ),
     ):
-        r = await client.get("/auth/google/callback?code=auth_code_456&state=driver")
+        r = await client.get(
+            f"/auth/google/callback?code=auth_code_456&state={_signed_state('driver')}"
+        )
 
     assert r.status_code == 200
     decoded = decode_token(r.json()["access_token"], expected_type=TokenType.ACCESS)
@@ -315,19 +333,45 @@ async def test_google_callback_invalid_code(client: AsyncClient, monkeypatch):
         "app.services.google_auth._exchange_code",
         AsyncMock(return_value=(400, {"error": "invalid_grant", "error_description": "Code expired"})),
     ):
-        r = await client.get("/auth/google/callback?code=expired_code&state=customer")
+        r = await client.get(
+            f"/auth/google/callback?code=expired_code&state={_signed_state('customer')}"
+        )
 
     assert r.status_code == 401
 
 
 async def test_google_callback_invalid_state(client: AsyncClient, monkeypatch):
-    """state must be a valid role string."""
+    """state must be a valid HMAC-signed token — forged/unsigned state is rejected."""
     _patch_settings_google(monkeypatch)
-    r = await client.get("/auth/google/callback?code=some_code&state=superadmin")
+    r = await client.get("/auth/google/callback?code=some_code&state=customer")
     assert r.status_code == 400
 
 
-async def test_google_callback_not_configured(client: AsyncClient):
+async def test_google_callback_tampered_state(client: AsyncClient, monkeypatch):
+    """Tampered state (wrong HMAC) must be rejected."""
+    _patch_settings_google(monkeypatch)
+    r = await client.get("/auth/google/callback?code=some_code&state=customer.badhash")
+    assert r.status_code == 400
+
+
+async def test_google_callback_unverified_email(client: AsyncClient, monkeypatch):
+    """Callback must reject accounts with unverified Google email."""
+    _patch_settings_google(monkeypatch)
+    unverified_userinfo = {**FAKE_USERINFO_CUSTOMER, "verified_email": False}
+    with (
+        patch("app.services.google_auth._exchange_code", _mock_exchange_code()),
+        patch("app.services.google_auth._fetch_userinfo", _mock_userinfo(unverified_userinfo)),
+    ):
+        r = await client.get(
+            f"/auth/google/callback?code=auth_code&state={_signed_state('customer')}"
+        )
+    assert r.status_code == 401
+
+
+async def test_google_callback_not_configured(client: AsyncClient, monkeypatch):
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", "")
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_SECRET", "")
     r = await client.get("/auth/google/callback?code=abc&state=customer")
     assert r.status_code == 400
 
@@ -410,8 +454,11 @@ async def test_post_google_invalid_token(client: AsyncClient, monkeypatch):
     assert r.status_code == 401
 
 
-async def test_post_google_not_configured(client: AsyncClient):
+async def test_post_google_not_configured(client: AsyncClient, monkeypatch):
     """Returns 400 when GOOGLE_CLIENT_ID is not set in env."""
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", "")
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_SECRET", "")
     r = await client.post("/auth/google", json={"id_token": "fake.id.token"})
     assert r.status_code == 400
 
@@ -439,3 +486,112 @@ async def test_post_google_user_accesses_protected_endpoint(client: AsyncClient,
     me_r = await client.get("/users/me", headers={"Authorization": f"Bearer {token}"})
     assert me_r.status_code == 200
     assert me_r.json()["email"] == "pg_prot@gmail.com"
+
+
+# ---------------------------------------------------------------------------
+# POST /auth/google — additional edge-case tests
+# ---------------------------------------------------------------------------
+
+
+async def test_post_google_wrong_audience(client: AsyncClient, monkeypatch):
+    """Token whose 'aud' doesn't match our client ID must be rejected."""
+    _patch_settings_google(monkeypatch)
+    info = {**FAKE_TOKENINFO_CUSTOMER, "aud": "different-client-id"}
+    with patch("app.services.google_auth._fetch_tokeninfo", _mock_tokeninfo(info)):
+        r = await client.post("/auth/google", json={"id_token": "fake.id.token"})
+    assert r.status_code == 401
+    assert r.json()["error"]["code"] == "unauthorized"
+
+
+async def test_post_google_unverified_email(client: AsyncClient, monkeypatch):
+    """Token for account with unverified email must be rejected."""
+    _patch_settings_google(monkeypatch)
+    info = {**FAKE_TOKENINFO_CUSTOMER, "email_verified": "false"}
+    with patch("app.services.google_auth._fetch_tokeninfo", _mock_tokeninfo(info)):
+        r = await client.post("/auth/google", json={"id_token": "fake.id.token"})
+    assert r.status_code == 401
+
+
+async def test_post_google_links_existing_password_account(
+    client: AsyncClient, customer: dict, monkeypatch
+):
+    """Google login with same email as existing password account links them."""
+    _patch_settings_google(monkeypatch)
+    existing_email = customer["user"]["email"]
+    info = {**FAKE_TOKENINFO_CUSTOMER, "sub": "pg-uid-link-001", "email": existing_email}
+    with patch("app.services.google_auth._fetch_tokeninfo", _mock_tokeninfo(info)):
+        r = await client.post("/auth/google", json={"id_token": "fake.id.token"})
+    assert r.status_code == 200
+    decoded = decode_token(r.json()["access_token"], expected_type=TokenType.ACCESS)
+    assert int(decoded["sub"]) == customer["user"]["id"]
+
+
+async def test_post_google_role_mismatch_existing_account(
+    client: AsyncClient, customer: dict, monkeypatch
+):
+    """Cannot sign in as driver when the existing email is a customer account."""
+    _patch_settings_google(monkeypatch)
+    existing_email = customer["user"]["email"]
+    info = {**FAKE_TOKENINFO_CUSTOMER, "sub": "pg-uid-mismatch-001", "email": existing_email}
+    with patch("app.services.google_auth._fetch_tokeninfo", _mock_tokeninfo(info)):
+        r = await client.post("/auth/google", json={"id_token": "fake.id.token", "role": "driver"})
+    assert r.status_code == 401
+    assert r.json()["error"]["code"] == "unauthorized"
+
+
+async def test_post_google_admin_role_rejected(client: AsyncClient, monkeypatch):
+    """role='admin' is a valid UserRole enum but the service rejects it with 400."""
+    _patch_settings_google(monkeypatch)
+    r = await client.post("/auth/google", json={"id_token": "fake.id.token", "role": "admin"})
+    assert r.status_code == 400
+
+
+async def test_post_google_callback_state_csrf_protection(client: AsyncClient, monkeypatch):
+    """Unsigned / plain-text state is rejected by the callback (CSRF guard)."""
+    _patch_settings_google(monkeypatch)
+    # state is just the role without HMAC signature — must be rejected
+    r = await client.get("/auth/google/callback?code=any_code&state=customer")
+    assert r.status_code == 400
+
+
+async def test_google_returning_user_wrong_role_rejected(client: AsyncClient, monkeypatch):
+    """A returning Google user cannot login under a different role than their account.
+
+    Scenario: user previously signed up as a customer via Google.
+    If they now try POST /auth/google with role='driver', the backend must
+    reject them with 401 — even though their google_id is in the DB.
+    """
+    _patch_settings_google(monkeypatch)
+    # First login: create the account as a customer
+    info = {
+        **FAKE_TOKENINFO_CUSTOMER,
+        "sub": "google-uid-role-switch-001",
+        "email": "role_switch@gmail.com",
+    }
+    with patch("app.services.google_auth._fetch_tokeninfo", _mock_tokeninfo(info)):
+        r1 = await client.post("/auth/google", json={"id_token": "t", "role": "customer"})
+    assert r1.status_code == 200
+
+    # Second login: same google_id, but claiming to be a driver — must fail
+    with patch("app.services.google_auth._fetch_tokeninfo", _mock_tokeninfo(info)):
+        r2 = await client.post("/auth/google", json={"id_token": "t", "role": "driver"})
+    assert r2.status_code == 401
+    assert r2.json()["error"]["code"] == "unauthorized"
+
+
+async def test_google_returning_driver_cannot_login_as_customer(client: AsyncClient, monkeypatch):
+    """A driver account cannot be accessed with role='customer'."""
+    _patch_settings_google(monkeypatch)
+    info = {
+        **FAKE_TOKENINFO_DRIVER,
+        "sub": "google-uid-drv-switch-001",
+        "email": "drv_switch@gmail.com",
+    }
+    with patch("app.services.google_auth._fetch_tokeninfo", _mock_tokeninfo(info)):
+        r1 = await client.post("/auth/google", json={"id_token": "t", "role": "driver"})
+    assert r1.status_code == 200
+
+    with patch("app.services.google_auth._fetch_tokeninfo", _mock_tokeninfo(info)):
+        r2 = await client.post("/auth/google", json={"id_token": "t", "role": "customer"})
+    assert r2.status_code == 401
+    assert r2.json()["error"]["code"] == "unauthorized"

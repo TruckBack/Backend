@@ -10,6 +10,8 @@ the entire httpx.AsyncClient machinery.
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import secrets
 from urllib.parse import urlencode
 
@@ -72,11 +74,52 @@ async def _fetch_userinfo(access_token: str) -> tuple[int, dict]:
 # Authorization URL helper (stateless, no DB needed)
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Stateless CSRF state helpers
+# ---------------------------------------------------------------------------
+
+def _make_state(role: str) -> str:
+    """Produce a state token: ``{role}.{hmac_hex}``.
+
+    The HMAC is computed over ``role`` using the application's SECRET_KEY so
+    the callback can verify the state was issued by this server (prevents
+    CSRF / open-redirect attacks on the OAuth callback).
+    """
+    sig = hmac.new(
+        settings.SECRET_KEY.encode(),
+        role.encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"{role}.{sig}"
+
+
+def _parse_state(state: str) -> str:
+    """Parse and verify a state token, returning the embedded role.
+
+    Raises :class:`~app.core.exceptions.BadRequestError` if the state is
+    malformed or the HMAC signature does not match.
+    """
+    parts = state.split(".", 1)
+    if len(parts) != 2:
+        raise BadRequestError("Invalid OAuth state parameter")
+    role, received_sig = parts
+    expected_sig = hmac.new(
+        settings.SECRET_KEY.encode(),
+        role.encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(received_sig, expected_sig):
+        raise BadRequestError("OAuth state signature mismatch (possible CSRF)")
+    if role not in (UserRole.CUSTOMER.value, UserRole.DRIVER.value):
+        raise BadRequestError(f"Invalid role in OAuth state: '{role}'")
+    return role
+
+
 def get_authorization_url(role: str) -> str:
     """Return the Google OAuth2 consent-screen URL.
 
-    *role* is embedded in the ``state`` parameter so the callback knows which
-    role to assign on first sign-up.
+    *role* is embedded in a signed ``state`` parameter so the callback can
+    verify integrity and assign the correct role on first sign-up.
     """
     if not settings.GOOGLE_CLIENT_ID:
         raise BadRequestError("Google OAuth is not configured on this server")
@@ -87,7 +130,7 @@ def get_authorization_url(role: str) -> str:
         "redirect_uri": settings.GOOGLE_REDIRECT_URI,
         "response_type": "code",
         "scope": "openid email profile",
-        "state": role,
+        "state": _make_state(role),
         "access_type": "offline",
         "prompt": "select_account",
     }
@@ -130,6 +173,11 @@ class GoogleAuthService:
         if user:
             if not user.is_active:
                 raise UnauthorizedError("Account is disabled")
+            if user.role != role:
+                raise UnauthorizedError(
+                    f"This Google account is registered as '{user.role.value}', "
+                    f"not '{role.value}'"
+                )
             return user
 
         # 2. Existing email account — link Google ID
@@ -204,16 +252,16 @@ class GoogleAuthService:
     async def handle_callback(self, code: str, state: str) -> User:
         """Exchange an authorization code (from Google's redirect) for a user.
 
-        *state* must contain the role string that was passed to
-        :func:`get_authorization_url`.
+        *state* is a signed token produced by :func:`_make_state`; the
+        embedded role string is recovered and verified before use.
         """
         self._require_configured()
-        if state not in (UserRole.CUSTOMER.value, UserRole.DRIVER.value):
-            raise BadRequestError(f"Invalid role in OAuth state: '{state}'")
+        # Verify HMAC signature and extract role
+        role_str = _parse_state(state)
         try:
-            role_enum = UserRole(state)
+            role_enum = UserRole(role_str)
         except ValueError:
-            raise BadRequestError(f"Invalid role in OAuth state: '{state}'")
+            raise BadRequestError(f"Invalid role in OAuth state: '{role_str}'") from None
         # Exchange auth code → Google tokens
         token_status, token_data = await _exchange_code(code, settings.GOOGLE_REDIRECT_URI)
         if token_status != 200:
@@ -235,5 +283,8 @@ class GoogleAuthService:
 
         if not google_id or not email:
             raise UnauthorizedError("Incomplete profile returned by Google")
+
+        if not user_info.get("verified_email"):
+            raise UnauthorizedError("Google account email is not verified")
 
         return await self._find_or_create_user(google_id, email, full_name, role_enum)
