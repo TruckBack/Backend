@@ -54,7 +54,7 @@ async def login(
 @router.post("/login/json", response_model=TokenResponse)
 async def login_json(payload: LoginRequest, db: DbSession) -> TokenResponse:
     service = AuthService(db)
-    user = await service.authenticate(payload.email, payload.password)
+    user = await service.authenticate(payload.email, payload.password, role=payload.role)
     return service.issue_tokens(user)
 
 

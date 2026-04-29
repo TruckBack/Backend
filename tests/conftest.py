@@ -228,7 +228,7 @@ async def register_customer(client: AsyncClient):
         assert r.status_code == 201, r.text
         login = await client.post(
             "/auth/login/json",
-            json={"email": payload["email"], "password": payload["password"]},
+            json={"email": payload["email"], "password": payload["password"], "role": "customer"},
         )
         assert login.status_code == 200, login.text
         tokens = login.json()
@@ -250,7 +250,7 @@ async def register_driver(client: AsyncClient):
         assert r.status_code == 201, r.text
         login = await client.post(
             "/auth/login/json",
-            json={"email": payload["email"], "password": payload["password"]},
+            json={"email": payload["email"], "password": payload["password"], "role": "driver"},
         )
         assert login.status_code == 200, login.text
         tokens = login.json()

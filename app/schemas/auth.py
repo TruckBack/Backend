@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, EmailStr, Field
 
+from app.models.user import UserRole
+
 
 class CustomerRegister(BaseModel):
     email: EmailStr
@@ -20,6 +22,7 @@ class DriverRegister(CustomerRegister):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+    role: UserRole = Field(..., description="'customer' or 'driver'")
 
 
 class TokenResponse(BaseModel):

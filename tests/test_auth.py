@@ -98,7 +98,8 @@ async def test_login_json_returns_tokens(client: AsyncClient, customer_payload):
     payload = customer_payload()
     await client.post("/auth/register/customer", json=payload)
     r = await client.post(
-        "/auth/login/json", json={"email": payload["email"], "password": payload["password"]}
+        "/auth/login/json",
+        json={"email": payload["email"], "password": payload["password"], "role": "customer"},
     )
     assert r.status_code == 200
     tokens = r.json()
@@ -129,7 +130,7 @@ async def test_login_wrong_password(client: AsyncClient, customer_payload):
     await client.post("/auth/register/customer", json=payload)
     r = await client.post(
         "/auth/login/json",
-        json={"email": payload["email"], "password": "wrong-password"},
+        json={"email": payload["email"], "password": "wrong-password", "role": "customer"},
     )
     assert r.status_code == 401
     assert r.json()["error"]["code"] == "unauthorized"
@@ -137,7 +138,8 @@ async def test_login_wrong_password(client: AsyncClient, customer_payload):
 
 async def test_login_unknown_email(client: AsyncClient):
     r = await client.post(
-        "/auth/login/json", json={"email": "ghost@example.com", "password": "whatever123"}
+        "/auth/login/json",
+        json={"email": "ghost@example.com", "password": "whatever123", "role": "customer"},
     )
     assert r.status_code == 401
 
@@ -147,7 +149,7 @@ async def test_login_is_case_insensitive_for_email(client: AsyncClient, customer
     await client.post("/auth/register/customer", json=payload)
     r = await client.post(
         "/auth/login/json",
-        json={"email": "mixed@example.com", "password": payload["password"]},
+        json={"email": "mixed@example.com", "password": payload["password"], "role": "customer"},
     )
     assert r.status_code == 200
 
@@ -211,3 +213,60 @@ async def test_refresh_for_nonexistent_user_rejected(client: AsyncClient):
     rt = create_refresh_token(999999)
     r = await client.post("/auth/refresh", json={"refresh_token": rt})
     assert r.status_code == 401
+
+
+# ---------- Role-based login ----------
+
+
+async def test_login_wrong_role_customer_as_driver(
+    client: AsyncClient, customer_payload
+):
+    """A customer account cannot log in with role='driver'."""
+    payload = customer_payload()
+    await client.post("/auth/register/customer", json=payload)
+    r = await client.post(
+        "/auth/login/json",
+        json={"email": payload["email"], "password": payload["password"], "role": "driver"},
+    )
+    assert r.status_code == 401
+    assert r.json()["error"]["code"] == "unauthorized"
+
+
+async def test_login_wrong_role_driver_as_customer(
+    client: AsyncClient, driver_payload
+):
+    """A driver account cannot log in with role='customer'."""
+    payload = driver_payload()
+    await client.post("/auth/register/driver", json=payload)
+    r = await client.post(
+        "/auth/login/json",
+        json={"email": payload["email"], "password": payload["password"], "role": "customer"},
+    )
+    assert r.status_code == 401
+    assert r.json()["error"]["code"] == "unauthorized"
+
+
+async def test_login_correct_role_driver(
+    client: AsyncClient, driver_payload
+):
+    """A driver can log in with role='driver'."""
+    payload = driver_payload()
+    await client.post("/auth/register/driver", json=payload)
+    r = await client.post(
+        "/auth/login/json",
+        json={"email": payload["email"], "password": payload["password"], "role": "driver"},
+    )
+    assert r.status_code == 200
+    decoded = decode_token(r.json()["access_token"], expected_type=TokenType.ACCESS)
+    assert decoded["role"] == "driver"
+
+
+async def test_login_missing_role_rejected(client: AsyncClient, customer_payload):
+    """role is required — omitting it returns 422."""
+    payload = customer_payload()
+    await client.post("/auth/register/customer", json=payload)
+    r = await client.post(
+        "/auth/login/json",
+        json={"email": payload["email"], "password": payload["password"]},
+    )
+    assert r.status_code == 422

@@ -29,7 +29,7 @@ def _register_customer(tc: TestClient, email="alice@example.com") -> dict:
     assert r.status_code == 201, r.text
     login = tc.post(
         "/api/v1/auth/login/json",
-        json={"email": payload["email"], "password": payload["password"]},
+        json={"email": payload["email"], "password": payload["password"], "role": "customer"},
     )
     tokens = login.json()
     return {"user": r.json(), "tokens": tokens, "headers": {"Authorization": f"Bearer {tokens['access_token']}"}}
@@ -48,7 +48,7 @@ def _register_driver(tc: TestClient, email="bob@example.com", lic="LIC-0001") ->
     assert r.status_code == 201, r.text
     login = tc.post(
         "/api/v1/auth/login/json",
-        json={"email": payload["email"], "password": payload["password"]},
+        json={"email": payload["email"], "password": payload["password"], "role": "driver"},
     )
     tokens = login.json()
     return {"user": r.json(), "tokens": tokens, "headers": {"Authorization": f"Bearer {tokens['access_token']}"}}

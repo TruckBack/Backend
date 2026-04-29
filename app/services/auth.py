@@ -68,12 +68,19 @@ class AuthService:
         await self.db.refresh(user)
         return user
 
-    async def authenticate(self, email: str, password: str) -> User:
+    async def authenticate(
+        self,
+        email: str,
+        password: str,
+        role: "UserRole | None" = None,
+    ) -> User:
         user = await self.users.get_by_email(email)
         if not user or not verify_password(password, user.hashed_password):
             raise UnauthorizedError("Invalid credentials")
         if not user.is_active:
             raise UnauthorizedError("Account is disabled")
+        if role is not None and user.role != role:
+            raise UnauthorizedError("Invalid credentials")
         return user
 
     @staticmethod
