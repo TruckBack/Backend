@@ -33,6 +33,7 @@ class User(Base, IdMixin, TimestampMixin):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     profile_image_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    google_id: Mapped[str | None] = mapped_column(String(128), unique=True, nullable=True, index=True)
 
     driver: Mapped["Driver | None"] = relationship(
         back_populates="user",

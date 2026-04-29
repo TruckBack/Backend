@@ -22,6 +22,22 @@ class OrderCreate(ORMModel):
     currency: str = Field(default="USD", min_length=3, max_length=8)
 
 
+class OrderUpdate(ORMModel):
+    """Partial update schema — all fields optional (PATCH semantics)."""
+
+    pickup_address: str | None = Field(default=None, min_length=1, max_length=512)
+    pickup_lat: float | None = Field(default=None, ge=-90, le=90)
+    pickup_lng: float | None = Field(default=None, ge=-180, le=180)
+    dropoff_address: str | None = Field(default=None, min_length=1, max_length=512)
+    dropoff_lat: float | None = Field(default=None, ge=-90, le=90)
+    dropoff_lng: float | None = Field(default=None, ge=-180, le=180)
+    cargo_description: str | None = Field(default=None, max_length=512)
+    cargo_weight_kg: float | None = Field(default=None, gt=0)
+    notes: str | None = None
+    price_cents: int | None = Field(default=None, gt=0)
+    currency: str | None = Field(default=None, min_length=3, max_length=8)
+
+
 class OrderCancel(ORMModel):
     reason: str | None = Field(default=None, max_length=512)
 

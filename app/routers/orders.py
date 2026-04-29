@@ -6,7 +6,7 @@ from fastapi import APIRouter, Query, status
 
 from app.core.dependencies import CurrentCustomer, CurrentUser, DbSession
 from app.schemas.common import Page
-from app.schemas.order import OrderCancel, OrderCreate, OrderRead, OrderStatusEvent
+from app.schemas.order import OrderCancel, OrderCreate, OrderRead, OrderStatusEvent, OrderUpdate
 from app.services.order import OrderService
 from app.services.ws_manager import tracking_manager
 
@@ -76,6 +76,21 @@ async def list_my_active(db: DbSession, current: CurrentUser) -> list[OrderRead]
 async def get_order(order_id: int, db: DbSession, current: CurrentUser) -> OrderRead:
     order = await OrderService(db).get_for_user(order_id, current)
     return OrderRead.model_validate(order)
+
+
+@router.patch("/{order_id}", response_model=OrderRead)
+async def update_order(
+    order_id: int, payload: OrderUpdate, db: DbSession, current: CurrentUser
+) -> OrderRead:
+    order = await OrderService(db).update(order_id, current, payload)
+    return OrderRead.model_validate(order)
+
+
+@router.delete("/{order_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_order(
+    order_id: int, db: DbSession, current: CurrentUser
+) -> None:
+    await OrderService(db).delete(order_id, current)
 
 
 async def _broadcast(order) -> None:

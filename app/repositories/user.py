@@ -17,6 +17,10 @@ class UserRepository(BaseRepository[User]):
         stmt = select(User).where(User.email == email.lower())
         return (await self.session.execute(stmt)).scalar_one_or_none()
 
+    async def get_by_google_id(self, google_id: str) -> User | None:
+        stmt = select(User).where(User.google_id == google_id)
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
     async def get_by_id_with_driver(self, user_id: int) -> User | None:
         stmt = select(User).options(selectinload(User.driver)).where(User.id == user_id)
         return (await self.session.execute(stmt)).scalar_one_or_none()

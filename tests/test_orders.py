@@ -424,3 +424,220 @@ async def test_unrelated_customer_cannot_cancel(
         headers=other["headers"],
     )
     assert r.status_code == 403
+
+
+# ---------- Update (PATCH) ----------
+
+
+async def test_customer_can_update_pending_order(
+    client: AsyncClient, customer: dict, pending_order: dict
+):
+    r = await client.patch(
+        f"/orders/{pending_order['id']}",
+        json={"pickup_address": "New Pickup St 42", "price_cents": 9999},
+        headers=customer["headers"],
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["pickup_address"] == "New Pickup St 42"
+    assert body["price_cents"] == 9999
+    # Other fields remain unchanged
+    assert body["status"] == "pending"
+    assert body["dropoff_address"] == pending_order["dropoff_address"]
+
+
+async def test_update_all_editable_fields(
+    client: AsyncClient, customer: dict, pending_order: dict
+):
+    patch = {
+        "pickup_address": "PA",
+        "pickup_lat": 31.0,
+        "pickup_lng": 34.0,
+        "dropoff_address": "DA",
+        "dropoff_lat": 32.0,
+        "dropoff_lng": 35.0,
+        "notes": "handle with care",
+        "cargo_description": "furniture",
+        "cargo_weight_kg": 120.5,
+        "price_cents": 50000,
+        "currency": "ILS",
+    }
+    r = await client.patch(
+        f"/orders/{pending_order['id']}", json=patch, headers=customer["headers"]
+    )
+    assert r.status_code == 200
+    body = r.json()
+    for key, val in patch.items():
+        assert body[key] == val, f"field {key!r} mismatch"
+
+
+async def test_update_returns_unchanged_fields_intact(
+    client: AsyncClient, customer: dict, pending_order: dict
+):
+    """Empty patch body — nothing changes."""
+    r = await client.patch(
+        f"/orders/{pending_order['id']}", json={}, headers=customer["headers"]
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["id"] == pending_order["id"]
+    assert body["status"] == "pending"
+    assert body["customer_id"] == customer["user"]["id"]
+
+
+async def test_update_accepted_order_rejected(
+    client: AsyncClient,
+    customer: dict,
+    driver: dict,
+    pending_order: dict,
+    make_driver_available,
+):
+    await make_driver_available(driver)
+    await client.post(
+        f"/orders/{pending_order['id']}/accept", headers=driver["headers"]
+    )
+    r = await client.patch(
+        f"/orders/{pending_order['id']}",
+        json={"notes": "too late"},
+        headers=customer["headers"],
+    )
+    assert r.status_code == 400
+    assert r.json()["error"]["code"] == "bad_request"
+
+
+async def test_update_other_customer_forbidden(
+    client: AsyncClient, register_customer, pending_order: dict
+):
+    other = await register_customer(email="intruder@example.com")
+    r = await client.patch(
+        f"/orders/{pending_order['id']}",
+        json={"notes": "hacked"},
+        headers=other["headers"],
+    )
+    assert r.status_code == 403
+
+
+async def test_update_driver_forbidden(
+    client: AsyncClient, driver: dict, pending_order: dict
+):
+    r = await client.patch(
+        f"/orders/{pending_order['id']}",
+        json={"notes": "driver sneaking"},
+        headers=driver["headers"],
+    )
+    assert r.status_code == 403
+
+
+async def test_update_nonexistent_order_404(client: AsyncClient, customer: dict):
+    r = await client.patch(
+        "/orders/999999", json={"notes": "ghost"}, headers=customer["headers"]
+    )
+    assert r.status_code == 404
+
+
+async def test_update_requires_auth(client: AsyncClient, pending_order: dict):
+    r = await client.patch(f"/orders/{pending_order['id']}", json={"notes": "x"})
+    assert r.status_code == 401
+
+
+@pytest.mark.parametrize(
+    "bad_field",
+    [
+        {"pickup_lat": 999},
+        {"pickup_lng": -999},
+        {"dropoff_lat": 999},
+        {"price_cents": 0},
+        {"price_cents": -5},
+        {"cargo_weight_kg": -1},
+        {"pickup_address": ""},
+        {"currency": "TOOLONG_CURRENCY"},
+    ],
+)
+async def test_update_validation_errors(
+    client: AsyncClient, customer: dict, pending_order: dict, bad_field
+):
+    r = await client.patch(
+        f"/orders/{pending_order['id']}", json=bad_field, headers=customer["headers"]
+    )
+    assert r.status_code == 422
+
+
+# ---------- Delete ----------
+
+
+async def test_customer_can_delete_pending_order(
+    client: AsyncClient, customer: dict, pending_order: dict
+):
+    r = await client.delete(
+        f"/orders/{pending_order['id']}", headers=customer["headers"]
+    )
+    assert r.status_code == 204
+
+    # Order is gone from DB
+    r2 = await client.get(
+        f"/orders/{pending_order['id']}", headers=customer["headers"]
+    )
+    assert r2.status_code == 404
+
+
+async def test_delete_accepted_order_rejected(
+    client: AsyncClient,
+    customer: dict,
+    driver: dict,
+    pending_order: dict,
+    make_driver_available,
+):
+    await make_driver_available(driver)
+    await client.post(
+        f"/orders/{pending_order['id']}/accept", headers=driver["headers"]
+    )
+    r = await client.delete(
+        f"/orders/{pending_order['id']}", headers=customer["headers"]
+    )
+    assert r.status_code == 400
+    assert r.json()["error"]["code"] == "bad_request"
+
+
+async def test_delete_other_customer_forbidden(
+    client: AsyncClient, register_customer, pending_order: dict
+):
+    other = await register_customer(email="thief@example.com")
+    r = await client.delete(
+        f"/orders/{pending_order['id']}", headers=other["headers"]
+    )
+    assert r.status_code == 403
+
+
+async def test_delete_driver_forbidden(
+    client: AsyncClient, driver: dict, pending_order: dict
+):
+    r = await client.delete(
+        f"/orders/{pending_order['id']}", headers=driver["headers"]
+    )
+    assert r.status_code == 403
+
+
+async def test_delete_nonexistent_order_404(client: AsyncClient, customer: dict):
+    r = await client.delete("/orders/999999", headers=customer["headers"])
+    assert r.status_code == 404
+
+
+async def test_delete_requires_auth(client: AsyncClient, pending_order: dict):
+    r = await client.delete(f"/orders/{pending_order['id']}")
+    assert r.status_code == 401
+
+
+async def test_delete_removes_from_available_list(
+    client: AsyncClient, customer: dict, driver: dict, order_payload
+):
+    """Deleted order must not appear in the available pool."""
+    r = await client.post("/orders", json=order_payload(), headers=customer["headers"])
+    oid = r.json()["id"]
+
+    before = await client.get("/orders/available", headers=driver["headers"])
+    total_before = before.json()["total"]
+
+    await client.delete(f"/orders/{oid}", headers=customer["headers"])
+
+    after = await client.get("/orders/available", headers=driver["headers"])
+    assert after.json()["total"] == total_before - 1

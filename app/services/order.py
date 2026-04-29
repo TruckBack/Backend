@@ -15,7 +15,7 @@ from app.models.order import ORDER_TRANSITIONS, Order, OrderStatus
 from app.models.user import User, UserRole
 from app.repositories.driver import DriverRepository
 from app.repositories.order import OrderRepository
-from app.schemas.order import OrderCancel, OrderCreate
+from app.schemas.order import OrderCancel, OrderCreate, OrderUpdate
 
 
 class OrderService:
@@ -144,6 +144,34 @@ class OrderService:
 
     async def complete(self, order_id: int, user: User) -> Order:
         return await self._driver_action(order_id, user, OrderStatus.COMPLETED, "completed_at")
+
+    async def update(self, order_id: int, user: User, data: OrderUpdate) -> Order:
+        order = await self.orders.get_by_id_for_update(order_id)
+        if not order:
+            raise NotFoundError("Order not found")
+        is_owner = user.role == UserRole.CUSTOMER and order.customer_id == user.id
+        if not (is_owner or user.role == UserRole.ADMIN):
+            raise ForbiddenError("Only the customer who created this order can edit it")
+        if order.status != OrderStatus.PENDING:
+            raise BadRequestError("Only pending orders can be edited")
+        changes = data.model_dump(exclude_unset=True)
+        for field, value in changes.items():
+            setattr(order, field, value)
+        await self.db.commit()
+        await self.db.refresh(order)
+        return order
+
+    async def delete(self, order_id: int, user: User) -> None:
+        order = await self.orders.get_by_id_for_update(order_id)
+        if not order:
+            raise NotFoundError("Order not found")
+        is_owner = user.role == UserRole.CUSTOMER and order.customer_id == user.id
+        if not (is_owner or user.role == UserRole.ADMIN):
+            raise ForbiddenError("Only the customer who created this order can delete it")
+        if order.status != OrderStatus.PENDING:
+            raise BadRequestError("Only pending orders can be deleted; cancel active orders instead")
+        await self.orders.delete(order)
+        await self.db.commit()
 
     async def cancel(self, order_id: int, user: User, data: OrderCancel) -> Order:
         order = await self.orders.get_by_id_for_update(order_id)

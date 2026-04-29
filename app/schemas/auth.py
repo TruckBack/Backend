@@ -34,3 +34,32 @@ class TokenResponse(BaseModel):
 
 class RefreshRequest(BaseModel):
     refresh_token: str
+
+
+class GoogleTokenRequest(BaseModel):
+    """Frontend sends the Google ID token it obtained client-side."""
+
+    id_token: str
+    role: UserRole = Field(..., description="'customer' or 'driver'")
+
+
+class GoogleIdTokenRequest(BaseModel):
+    """Simplified payload for POST /auth/google.
+
+    Accepts only an ID token; role defaults to 'customer'.
+    Use role='driver' explicitly when signing in as a driver.
+    """
+
+    id_token: str
+    role: UserRole = Field(default=UserRole.CUSTOMER, description="'customer' or 'driver'")
+
+
+class GoogleCallbackRequest(BaseModel):
+    """Backend callback: code + state sent by Google redirect."""
+
+    code: str
+    state: str  # contains role
+
+
+class GoogleAuthUrlResponse(BaseModel):
+    url: str

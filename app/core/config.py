@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     S3_BUCKET: str = ""
     S3_PRESIGNED_EXPIRE_SECONDS: int = 900
 
+    # Google OAuth2
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    GOOGLE_REDIRECT_URI: str = "http://localhost:8000/api/v1/auth/google/callback"
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def _split_cors(cls, v: object) -> List[str]:
