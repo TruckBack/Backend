@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     # Gemini AI
     GEMINI_API_KEY: str
 
+    # File uploads
+    UPLOADS_DIR: str = "uploads"
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def _split_cors(cls, v: object) -> List[str]:

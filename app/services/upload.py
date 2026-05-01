@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from pathlib import Path
 
 from app.core.config import settings
 from app.core.exceptions import BadRequestError
@@ -18,6 +19,9 @@ def _sanitize_filename(name: str) -> str:
     if not name or name in {".", ".."}:
         raise BadRequestError("Invalid filename")
     return name[:120]
+
+
+_ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 
 class UploadService:
@@ -40,3 +44,15 @@ class UploadService:
             public_url=public_object_url(key),
             expires_in=settings.S3_PRESIGNED_EXPIRE_SECONDS,
         )
+
+    @staticmethod
+    def save_order_image(order_id: int, file_name: str, content: bytes) -> str:
+        safe_name = _sanitize_filename(file_name)
+        unique_name = f"{uuid.uuid4().hex}_{safe_name}"
+        rel_dir = Path(settings.UPLOADS_DIR) / "order-images" / str(order_id)
+        target_path = rel_dir / unique_name
+
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        target_path.write_bytes(content)
+
+        return f"/uploads/order-images/{order_id}/{unique_name}"

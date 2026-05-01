@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
@@ -20,6 +22,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     configure_logging("DEBUG" if settings.DEBUG else "INFO")
+    os.makedirs(settings.UPLOADS_DIR, exist_ok=True)
     # Warm up Redis connection
     try:
         await get_redis().ping()
@@ -68,6 +71,8 @@ def create_app() -> FastAPI:
     api.include_router(ws.router)
     api.include_router(ai_price.router)
     app.include_router(api)
+
+    app.mount("/uploads", StaticFiles(directory=settings.UPLOADS_DIR), name="uploads")
 
     return app
 

@@ -36,6 +36,7 @@ class OrderUpdate(ORMModel):
     notes: str | None = None
     price_cents: int | None = Field(default=None, gt=0)
     currency: str | None = Field(default=None, min_length=3, max_length=8)
+    cargo_image_url: str | None = None
 
 
 class OrderCancel(ORMModel):
@@ -64,6 +65,7 @@ class OrderRead(ORMModel):
     completed_at: datetime | None = None
     cancelled_at: datetime | None = None
     cancellation_reason: str | None = None
+    cargo_image_url: str | None = None
     created_at: datetime
     updated_at: datetime
 

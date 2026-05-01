@@ -84,6 +84,7 @@ class Order(Base, IdMixin, TimestampMixin):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     cancellation_reason: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    cargo_image_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
 
     customer: Mapped["User"] = relationship(
         back_populates="orders", foreign_keys=[customer_id]
