@@ -12,7 +12,7 @@ from app.core.exceptions import BadRequestError, InternalServerError
 
 _GEMINI_URL = (
     "https://generativelanguage.googleapis.com/v1beta/models/"
-    "gemini-2.0-flash:generateContent"
+    "Gemini 2.5 Pro:generateContent"
 )
 
 _SYSTEM_PROMPT = (
