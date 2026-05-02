@@ -12,6 +12,8 @@ from app.utils.s3 import generate_presigned_put_url, public_object_url
 
 _SAFE_NAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
 
+MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10 MB
+
 
 def _sanitize_filename(name: str) -> str:
     name = name.strip().replace(" ", "_")
@@ -56,3 +58,26 @@ class UploadService:
         target_path.write_bytes(content)
 
         return f"/uploads/order-images/{order_id}/{unique_name}"
+
+    @staticmethod
+    def save_profile_image(user_id: int, file_name: str, content: bytes) -> str:
+        safe_name = _sanitize_filename(file_name)
+        unique_name = f"{uuid.uuid4().hex}_{safe_name}"
+        rel_dir = Path(settings.UPLOADS_DIR) / "profile-images" / str(user_id)
+        target_path = rel_dir / unique_name
+
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        target_path.write_bytes(content)
+
+        return f"/uploads/profile-images/{user_id}/{unique_name}"
+
+    @staticmethod
+    def delete_file_by_url(url: str) -> None:
+        """Delete the file pointed to by a stored /uploads/... URL. Silent if absent."""
+        prefix = "/uploads/"
+        relative = url[len(prefix):] if url.startswith(prefix) else url.lstrip("/")
+        path = Path(settings.UPLOADS_DIR) / relative
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
