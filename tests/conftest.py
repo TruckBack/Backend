@@ -74,12 +74,15 @@ from app.db.session import get_db  # noqa: E402
 from app.main import app as fastapi_app  # noqa: E402
 from app.models import Driver, DriverStatus, User, UserRole  # noqa: E402
 from app.routers import ws as ws_router_module  # noqa: E402
+from app.routers import chat as chat_router_module  # noqa: E402
 from app.services import upload as upload_service_module  # noqa: E402
 from app.services import ws_manager as ws_manager_module  # noqa: E402
+from app.services import chat_ws as chat_ws_module  # noqa: E402
 import app.main as main_module  # noqa: E402
 
 # Re-patch downstream bindings that captured the originals at import time.
 ws_manager_module.get_redis = _always_fake_redis
+chat_ws_module.get_redis = _always_fake_redis
 main_module.get_redis = _always_fake_redis
 main_module.close_redis = _noop_close_redis
 
@@ -155,8 +158,10 @@ async def app(db_sessionmaker):
 
     # Patch module-level references so code paths that don't use Depends still hit the test DB.
     original_ws_sm = ws_router_module.AsyncSessionLocal
+    original_chat_sm = chat_router_module.AsyncSessionLocal
     original_db_sm = db_session_module.AsyncSessionLocal
     ws_router_module.AsyncSessionLocal = db_sessionmaker
+    chat_router_module.AsyncSessionLocal = db_sessionmaker
     db_session_module.AsyncSessionLocal = db_sessionmaker
 
     # Flush fake redis between tests to isolate pub/sub state.
@@ -167,6 +172,7 @@ async def app(db_sessionmaker):
     finally:
         fastapi_app.dependency_overrides.pop(get_db, None)
         ws_router_module.AsyncSessionLocal = original_ws_sm
+        chat_router_module.AsyncSessionLocal = original_chat_sm
         db_session_module.AsyncSessionLocal = original_db_sm
 
 

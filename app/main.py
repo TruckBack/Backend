@@ -15,6 +15,7 @@ from app.core.redis import close_redis, get_redis
 from app.db.session import dispose_engine
 from app.routers import auth, drivers, orders, uploads, users, ws
 from app.routers import ai_price
+from app.routers import chat
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +70,7 @@ def create_app() -> FastAPI:
     api.include_router(orders.router)
     api.include_router(ws.router)
     api.include_router(ai_price.router)
+    api.include_router(chat.router)
     app.include_router(api)
 
     app.mount("/uploads", StaticFiles(directory=settings.UPLOADS_DIR), name="uploads")
