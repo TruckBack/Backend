@@ -59,7 +59,7 @@ async def test_aiprice_returns_result(
         r = await client.post(
             "/aiprice",
             json={"message": SAMPLE_MESSAGE},
-            headers={"Authorization": f"Bearer {customer['access_token']}"},
+            headers=customer["headers"],
         )
     assert r.status_code == 200
     body = r.json()
@@ -76,7 +76,7 @@ async def test_aiprice_driver_can_call(
         r = await client.post(
             "/aiprice",
             json={"message": SAMPLE_MESSAGE},
-            headers={"Authorization": f"Bearer {driver['access_token']}"},
+            headers=driver["headers"],
         )
     assert r.status_code == 200
     assert "result" in r.json()
@@ -98,7 +98,7 @@ async def test_aiprice_not_configured(
     r = await client.post(
         "/aiprice",
         json={"message": SAMPLE_MESSAGE},
-        headers={"Authorization": f"Bearer {customer['access_token']}"},
+        headers=customer["headers"],
     )
     assert r.status_code == 400
     assert r.json()["error"]["code"] == "bad_request"
@@ -116,7 +116,7 @@ async def test_aiprice_gemini_api_error(
         r = await client.post(
             "/aiprice",
             json={"message": SAMPLE_MESSAGE},
-            headers={"Authorization": f"Bearer {customer['access_token']}"},
+            headers=customer["headers"],
         )
     assert r.status_code == 500
     assert r.json()["error"]["code"] == "internal_server_error"
@@ -130,7 +130,7 @@ async def test_aiprice_empty_message_rejected(
     r = await client.post(
         "/aiprice",
         json={"message": ""},
-        headers={"Authorization": f"Bearer {customer['access_token']}"},
+        headers=customer["headers"],
     )
     assert r.status_code == 422
 
@@ -143,7 +143,7 @@ async def test_aiprice_missing_message_rejected(
     r = await client.post(
         "/aiprice",
         json={},
-        headers={"Authorization": f"Bearer {customer['access_token']}"},
+        headers=customer["headers"],
     )
     assert r.status_code == 422
 
@@ -157,7 +157,7 @@ async def test_aiprice_response_shape(
         r = await client.post(
             "/aiprice",
             json={"message": SAMPLE_MESSAGE},
-            headers={"Authorization": f"Bearer {customer['access_token']}"},
+            headers=customer["headers"],
         )
     assert r.status_code == 200
     body = r.json()
