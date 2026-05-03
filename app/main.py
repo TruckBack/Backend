@@ -15,6 +15,7 @@ from app.core.redis import close_redis, get_redis
 from app.db.session import dispose_engine
 from app.routers import auth, drivers, orders, uploads, users, ws
 from app.routers import ai_price
+from app.routers import chat
 
 logger = logging.getLogger(__name__)
 
@@ -47,14 +48,13 @@ def create_app() -> FastAPI:
         openapi_url="/openapi.json",
     )
 
-    if settings.CORS_ORIGINS:
-        app.add_middleware(
-            CORSMiddleware,
-            allow_origins=settings.CORS_ORIGINS,
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
-        )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     register_exception_handlers(app)
 
@@ -70,6 +70,7 @@ def create_app() -> FastAPI:
     api.include_router(orders.router)
     api.include_router(ws.router)
     api.include_router(ai_price.router)
+    api.include_router(chat.router)
     app.include_router(api)
 
     app.mount("/uploads", StaticFiles(directory=settings.UPLOADS_DIR), name="uploads")
