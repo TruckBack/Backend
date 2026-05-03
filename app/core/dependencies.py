@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import Depends
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -13,18 +13,16 @@ from app.db.session import get_db
 from app.models.user import User, UserRole
 from app.repositories.user import UserRepository
 
-oauth2_scheme = OAuth2PasswordBearer(
-    tokenUrl=f"{settings.API_V1_PREFIX}/auth/login",
-    auto_error=False,
-)
+http_bearer = HTTPBearer(auto_error=False)
 
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 
 async def get_current_user(
     db: DbSession,
-    token: Annotated[str | None, Depends(oauth2_scheme)],
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(http_bearer)],
 ) -> User:
+    token = credentials.credentials if credentials else None
     if not token:
         raise UnauthorizedError("Missing authentication token")
     payload = decode_token(token, expected_type=TokenType.ACCESS)
