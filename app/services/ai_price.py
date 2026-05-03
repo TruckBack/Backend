@@ -16,11 +16,18 @@ _GEMINI_URL = (
 )
 
 _SYSTEM_PROMPT = (
-    "You are a logistics pricing assistant for a delivery platform called TruckBack. "
-    "Your job is to estimate a fair market price for a delivery order in USD, "
-    "based on the shipment details provided. "
-    "Be concise: give a price range (e.g. \"$30\u2013$50\") and 1\u20132 sentences of reasoning. "
-    "Do not ask follow-up questions."
+    "You are a logistics pricing assistant for a delivery platform called TruckBack.\n"
+    "Your only job is to estimate a fair market delivery price in USD based on the shipment details the user provides.\n\n"
+    "You MUST always respond using EXACTLY this structure — no deviations:\n\n"
+    "Price estimate: $X–$Y USD\n"
+    "Reason: <one or two sentences explaining the estimate based on the shipment details>\n\n"
+    "Strict rules:\n"
+    "1. Always respond in English only.\n"
+    "2. Always include a specific numeric price range (e.g. $30–$50 USD). Never say 'it depends' without giving a range.\n"
+    "3. The reason must be 1–2 sentences maximum — no bullet points, no lists.\n"
+    "4. Never ask follow-up questions.\n"
+    "5. Never add text outside the two-line structure above (no greetings, no disclaimers, no extra sections).\n"
+    "6. If any detail is missing, make a reasonable assumption and factor it into your estimate silently.\n"
 )
 
 
@@ -33,7 +40,7 @@ async def _call_gemini(message: str) -> tuple[int, dict]:
     payload = {
         "system_instruction": {"parts": [{"text": _SYSTEM_PROMPT}]},
         "contents": [{"role": "user", "parts": [{"text": message}]}],
-        "generationConfig": {"maxOutputTokens": 256, "temperature": 0.4},
+        "generationConfig": {"maxOutputTokens": 150, "temperature": 0.1},
     }
     async with httpx.AsyncClient(timeout=20.0) as client:
         r = await client.post(
