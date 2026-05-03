@@ -11,6 +11,7 @@ from app.db.base import Base, IdMixin, TimestampMixin
 if TYPE_CHECKING:
     from app.models.driver import Driver
     from app.models.order import Order
+    from app.models.rating import DriverRating
 
 
 class UserRole(StrEnum):
@@ -43,4 +44,7 @@ class User(Base, IdMixin, TimestampMixin):
     orders: Mapped[list["Order"]] = relationship(
         back_populates="customer",
         foreign_keys="Order.customer_id",
+    )
+    given_ratings: Mapped[list["DriverRating"]] = relationship(
+        back_populates="customer",
     )

@@ -4,10 +4,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query, status
 
-from app.core.dependencies import CurrentCustomer, CurrentUser, DbSession
+from app.core.dependencies import CurrentCustomer, CurrentDriver, CurrentUser, DbSession
 from app.schemas.common import Page
 from app.schemas.order import OrderCancel, OrderCreate, OrderRead, OrderStatusEvent, OrderUpdate
+from app.schemas.rating import RatingCreate, RatingRead, RatingResponseCreate
 from app.services.order import OrderService
+from app.services.rating import RatingService
 from app.services.ws_manager import tracking_manager
 
 router = APIRouter(prefix="/orders", tags=["orders"])
@@ -135,3 +137,48 @@ async def cancel_order(
     order = await OrderService(db).cancel(order_id, current, payload)
     await _broadcast(order)
     return OrderRead.model_validate(order)
+
+
+@router.post(
+    "/{order_id}/rating",
+    response_model=RatingRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Submit a rating for the driver of a completed order",
+)
+async def submit_rating(
+    order_id: int, payload: RatingCreate, db: DbSession, current: CurrentCustomer
+) -> RatingRead:
+    return await RatingService(db).submit_rating(order_id, current, payload)
+
+
+@router.get(
+    "/{order_id}/rating",
+    response_model=RatingRead,
+    summary="Get the rating for a specific order",
+)
+async def get_order_rating(
+    order_id: int, db: DbSession, current: CurrentUser
+) -> RatingRead:
+    return await RatingService(db).get_rating_for_order(order_id, current)
+
+
+@router.post(
+    "/{order_id}/rating/response",
+    response_model=RatingRead,
+    summary="Driver posts or updates their public response to a rating",
+)
+async def submit_rating_response(
+    order_id: int, payload: RatingResponseCreate, db: DbSession, current: CurrentDriver
+) -> RatingRead:
+    return await RatingService(db).respond_to_rating(order_id, current, payload)
+
+
+@router.delete(
+    "/{order_id}/rating/response",
+    response_model=RatingRead,
+    summary="Driver removes their response from a rating",
+)
+async def delete_rating_response(
+    order_id: int, db: DbSession, current: CurrentDriver
+) -> RatingRead:
+    return await RatingService(db).delete_response(order_id, current)

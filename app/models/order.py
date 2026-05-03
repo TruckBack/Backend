@@ -11,6 +11,7 @@ from app.db.base import Base, IdMixin, TimestampMixin
 
 if TYPE_CHECKING:
     from app.models.driver import Driver
+    from app.models.rating import DriverRating
     from app.models.user import User
 
 
@@ -90,3 +91,6 @@ class Order(Base, IdMixin, TimestampMixin):
         back_populates="orders", foreign_keys=[customer_id]
     )
     driver: Mapped["Driver | None"] = relationship(back_populates="orders")
+    rating: Mapped["DriverRating | None"] = relationship(
+        back_populates="order", uselist=False, cascade="all, delete-orphan"
+    )

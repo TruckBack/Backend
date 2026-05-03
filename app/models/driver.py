@@ -11,6 +11,7 @@ from app.db.base import Base, IdMixin, TimestampMixin
 
 if TYPE_CHECKING:
     from app.models.order import Order
+    from app.models.rating import DriverRating
     from app.models.user import User
 
 
@@ -52,3 +53,4 @@ class Driver(Base, IdMixin, TimestampMixin):
 
     user: Mapped["User"] = relationship(back_populates="driver")
     orders: Mapped[list["Order"]] = relationship(back_populates="driver")
+    ratings: Mapped[list["DriverRating"]] = relationship(back_populates="driver")

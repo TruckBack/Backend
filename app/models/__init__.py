@@ -1,6 +1,7 @@
 from app.models.user import User, UserRole
 from app.models.driver import Driver, DriverStatus
 from app.models.order import Order, OrderStatus
+from app.models.rating import DriverRating
 from app.models.chat import ChatConversation, ChatMessage, MessageReadStatus
 
 __all__ = [
@@ -10,6 +11,7 @@ __all__ = [
     "DriverStatus",
     "Order",
     "OrderStatus",
+    "DriverRating",
     "ChatConversation",
     "ChatMessage",
     "MessageReadStatus",

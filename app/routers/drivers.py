@@ -1,15 +1,20 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, status
+from typing import Annotated
 
-from app.core.dependencies import CurrentDriver, DbSession
+from fastapi import APIRouter, Query, status
+
+from app.core.dependencies import CurrentDriver, CurrentUser, DbSession
+from app.schemas.common import Page
 from app.schemas.driver import (
     DriverLocationUpdate,
     DriverProfile,
     DriverProfileUpdate,
     DriverStatusUpdate,
 )
+from app.schemas.rating import RatingRead
 from app.services.driver import DriverService
+from app.services.rating import RatingService
 
 router = APIRouter(prefix="/drivers", tags=["drivers"])
 
@@ -40,3 +45,21 @@ async def update_location(
 ) -> DriverProfile:
     driver = await DriverService(db).update_location(current, payload)
     return DriverProfile.model_validate(driver)
+
+
+@router.get(
+    "/{driver_id}/ratings",
+    response_model=Page[RatingRead],
+    summary="List all ratings for a driver",
+)
+async def list_driver_ratings(
+    driver_id: int,
+    db: DbSession,
+    _: CurrentUser,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> Page[RatingRead]:
+    items, total = await RatingService(db).list_driver_ratings(
+        driver_id, limit=limit, offset=offset
+    )
+    return Page[RatingRead](items=items, total=total, limit=limit, offset=offset)
