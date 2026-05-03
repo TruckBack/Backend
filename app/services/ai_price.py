@@ -38,7 +38,7 @@ async def _call_gemini(message: str) -> tuple[int, dict]:
     async with httpx.AsyncClient(timeout=20.0) as client:
         r = await client.post(
             _GEMINI_URL,
-            params={"key": 'AIzaSyAWTJdk-ASs9jSJkQepKr3sS0bSKSYKbr4'},
+            params={"key": settings.GEMINI_API_KEY},
             json=payload,
         )
         return r.status_code, r.json()
